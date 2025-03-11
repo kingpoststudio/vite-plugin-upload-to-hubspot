@@ -11,10 +11,6 @@ yarn-error.log*
 # Dependency directories
 jspm_packages/
 
-# Build output
-dist/
-build/
-
 # Vite cache
 .vite/
 
