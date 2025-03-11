@@ -1,0 +1,36 @@
+{
+  "name": "vite-plugin-upload-to-hubspot",
+  "version": "0.0.1",
+  "description": "A Vite plugin to upload files to HubSpot",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "hubspot",
+    "upload"
+  ],
+  "author": "kingpoststudio",
+  "license": "MIT",
+  "dependencies": {
+    "@hubspot/local-dev-lib": "^3.3.1",
+    "vite": "^6.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kingpoststudio/vite-plugin-upload-to-hubspot.git"
+  },
+  "homepage": "https://github.com/kingpoststudio/vite-plugin-upload-to-hubspot#readme"
+}
