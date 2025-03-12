@@ -4,6 +4,7 @@ import { readdirSync, statSync } from 'node:fs';
 import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
 import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
+import { FieldsJs, isConvertableFieldJs } from '@hubspot/local-dev-lib/cms/handleFieldsJS';
 
 loadConfig("hubspot.config.yml");
 
@@ -63,6 +64,15 @@ export default function uploadToHubSpot(options: Options) {
       const uploadPromises = files.map(async (filepath: string) => {
         const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
         const uploadDest = normalizePath(join(dest, relativePath));
+
+        if (isConvertableFieldJs(srcDir, filepath, true)) {
+          logger.info(`Converting ${filepath} to JSON.`);
+          const fieldsJs = new FieldsJs(srcDir, filepath, srcDir);
+          await fieldsJs.init();
+          await fieldsJs.convertFieldsJs(srcDir);
+          fieldsJs.saveOutput();
+          logger.success(`Converted ${filepath} to JSON.`);
+        }
 
         try {
           await upload(accountId, filepath, uploadDest);
