@@ -42,21 +42,23 @@ export default function uploadToHubSpot(options) {
                 logger.warn(`No files found in ${srcDir}`);
                 return;
             }
+            const convertFieldsPromises = files.map(async (filepath) => {
+                if (isConvertableFieldJs(srcDir, filepath, true)) {
+                    logger.info(`Found a fields JS file: ${filepath}.`);
+                    const fieldsJs = new FieldsJs(srcDir, filepath, srcDir);
+                    await fieldsJs.init();
+                }
+            });
+            await Promise.all(convertFieldsPromises);
             const uploadPromises = files.map(async (filepath) => {
                 const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
                 const uploadDest = normalizePath(join(dest, relativePath));
-                if (isConvertableFieldJs(srcDir, filepath, true)) {
-                    logger.log('\n');
-                    const fieldsJs = new FieldsJs(srcDir, filepath, srcDir);
-                    await fieldsJs.init();
-                    logger.log('\n');
-                }
                 try {
                     await upload(accountId, filepath, uploadDest);
                     logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
                 }
                 catch (error) {
-                    logger.error(`Failed to upload ${uploadDest} to account ${accountId}. \n\t${error.message}`);
+                    logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
                 }
             });
             await Promise.all(uploadPromises);
