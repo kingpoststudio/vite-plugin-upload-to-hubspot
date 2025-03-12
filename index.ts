@@ -66,12 +66,10 @@ export default function uploadToHubSpot(options: Options) {
         const uploadDest = normalizePath(join(dest, relativePath));
 
         if (isConvertableFieldJs(srcDir, filepath, true)) {
-          logger.info(`Converting ${filepath} to JSON.`);
+          logger.log('\n');
           const fieldsJs = new FieldsJs(srcDir, filepath, srcDir);
           await fieldsJs.init();
-          await fieldsJs.convertFieldsJs(srcDir);
-          fieldsJs.saveOutput();
-          logger.success(`Converted ${filepath} to JSON.`);
+          logger.log('\n');
         }
 
         try {

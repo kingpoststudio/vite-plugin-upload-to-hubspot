@@ -9,6 +9,7 @@
     "dist/*"
   ],
   "scripts": {
+    "dev": "tsc -w",
     "build": "tsc",
     "prepublishOnly": "bun run build"
   },
@@ -33,6 +34,5 @@
     "type": "git",
     "url": "git+https://github.com/kingpoststudio/vite-plugin-upload-to-hubspot.git"
   },
-  "homepage": "https://github.com/kingpoststudio/vite-plugin-upload-to-hubspot#readme",
-  "private": true
+  "homepage": "https://github.com/kingpoststudio/vite-plugin-upload-to-hubspot#readme"
 }
