@@ -1,0 +1,16 @@
+defaultPortal: test
+portals:
+  - name: test
+    portalId: 12345678
+    env: prod
+    authType: personalaccesskey
+    auth:
+      tokenInfo:
+        accessToken: >-
+          MOCK_ACCESS_TOKEN
+        expiresAt: "2025-03-11T23:55:01.118Z"
+    personalAccessKey: >-
+      MOCK_PERSONAL_ACCESS_KEY
+    sandboxAccountType: null
+    parentAccountId: null
+    accountType: STANDARD

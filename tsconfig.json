@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "moduleResolution": "nodenext"
   },
+  "types": ["bun"],
   "include": ["index.ts"],
   "exclude": ["node_modules", "dist"]
 }

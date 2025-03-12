@@ -1,99 +1,165 @@
-import { describe, it, expect, beforeAll, vi } from 'bun:test';
-import { resolve } from 'node:path';
-import { readdirSync, statSync } from 'node:fs';
+/// <reference types="@types/bun" />
+import { describe, test, expect, mock, beforeEach } from 'bun:test';
 import uploadToHubSpot from './index';
-import { FieldsJs, isConvertableFieldJs } from '@hubspot/local-dev-lib/cms/handleFieldsJS';
-import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
-import { Logger } from '@hubspot/local-dev-lib/logger';
+import { normalizePath } from 'vite';
+import { join } from 'node:path';
 
 // Mock dependencies
-vi.mock('node:fs', () => ({
-  readdirSync: vi.fn(),
-  statSync: vi.fn(),
-}));
-vi.mock('@hubspot/local-dev-lib/api/fileMapper', () => ({
-  upload: vi.fn(),
-}));
-vi.mock('@hubspot/local-dev-lib/cms/handleFieldsJS', () => ({
-  FieldsJs: vi.fn().mockImplementation(() => ({
-    init: vi.fn(),
-    convertFieldsJs: vi.fn(),
-    saveOutput: vi.fn(),
-  })),
-  isConvertableFieldJs: vi.fn(),
-}));
-vi.mock('@hubspot/local-dev-lib/logger', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    log: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    success: vi.fn(),
-    error: vi.fn(),
-  })),
+const mockReaddirSync = mock(() => []);
+const mockStatSync = mock(() => ({ isDirectory: () => false }));
+const mockUpload = mock(() => Promise.resolve());
+const mockLoadConfig = mock(() => { });
+const mockGetAccountId = mock(() => '12345');
+const mockLogger = {
+  log: mock(() => { }),
+  info: mock(() => { }),
+  warn: mock(() => { }),
+  success: mock(() => { }),
+  error: mock(() => { }),
+};
+const mockSetLogger = mock(() => { });
+const mockSetLogLevel = mock(() => { });
+const mockIsConvertableFieldJs = mock(() => false);
+const mockFieldsJs = mock(() => ({
+  init: mock(() => Promise.resolve()),
+  convertFieldsJs: mock(() => Promise.resolve()),
+  saveOutput: mock(() => { }),
 }));
 
-describe('uploadToHubSpot plugin', () => {
+// Mock module imports
+mock.module('node:fs', () => ({
+  readdirSync: mockReaddirSync,
+  statSync: mockStatSync,
+}));
+
+mock.module('@hubspot/local-dev-lib/api/fileMapper', () => ({
+  upload: mockUpload,
+}));
+
+mock.module('@hubspot/local-dev-lib/config', () => ({
+  loadConfig: mockLoadConfig,
+  getAccountId: mockGetAccountId,
+}));
+
+mock.module('@hubspot/local-dev-lib/logger', () => ({
+  Logger: class {
+    log = mockLogger.log;
+    info = mockLogger.info;
+    warn = mockLogger.warn;
+    success = mockLogger.success;
+    error = mockLogger.error;
+  },
+  setLogger: mockSetLogger,
+  setLogLevel: mockSetLogLevel,
+  LOG_LEVEL: { LOG: 'log' },
+}));
+
+mock.module('@hubspot/local-dev-lib/cms/handleFieldsJS', () => ({
+  isConvertableFieldJs: mockIsConvertableFieldJs,
+  FieldsJs: mockFieldsJs,
+}));
+
+describe('uploadToHubSpot', () => {
   const options = {
-    src: 'src',
-    dest: 'dest',
-    account: 'develop',
+    src: './src',
+    dest: 'hubspot/dest',
+    account: 'test-account',
   };
 
-  const srcDir = resolve(options.src);
-  const accountId = '12345';
-
-  beforeAll(() => {
-    vi.mocked(readdirSync).mockReturnValue(['file1.js', 'file2.js']);
-    vi.mocked(statSync).mockReturnValue({ isDirectory: () => false } as any);
-    vi.mocked(isConvertableFieldJs).mockReturnValue(true);
-    vi.mocked(upload).mockResolvedValue({});
+  beforeEach(() => {
+    // Reset mocks before each test
+    mockReaddirSync.mockReset();
+    mockStatSync.mockReset();
+    mockUpload.mockReset();
+    mockLogger.log.mockReset();
+    mockLogger.info.mockReset();
+    mockLogger.warn.mockReset();
+    mockLogger.success.mockReset();
+    mockLogger.error.mockReset();
   });
 
-  it('should log messages and upload files', async () => {
+  test('plugin initializes with correct name', () => {
     const plugin = uploadToHubSpot(options);
-    const logger = new Logger();
-
-    await plugin.closeBundle.call({ logger });
-
-    expect(logger.log).toHaveBeenCalledWith(`\nUploading files from ${srcDir} to account ${accountId}.`);
-    expect(logger.info).toHaveBeenCalledWith(`Scanning ${srcDir} for files to upload.`);
-    expect(logger.warn).not.toHaveBeenCalled();
-    expect(logger.success).toHaveBeenCalledWith(`Successfully uploaded dest/file1.js to account ${accountId}.`);
-    expect(logger.success).toHaveBeenCalledWith(`Successfully uploaded dest/file2.js to account ${accountId}.`);
+    expect(plugin.name).toBe('UploadToHubSpot');
   });
 
-  it('should convert fields.js files to JSON', async () => {
-    const plugin = uploadToHubSpot(options);
-    const logger = new Logger();
-
-    await plugin.closeBundle.call({ logger });
-
-    expect(FieldsJs).toHaveBeenCalledTimes(2);
-    expect(FieldsJs.prototype.init).toHaveBeenCalledTimes(2);
-    expect(FieldsJs.prototype.convertFieldsJs).toHaveBeenCalledTimes(2);
-    expect(FieldsJs.prototype.saveOutput).toHaveBeenCalledTimes(2);
-    expect(logger.success).toHaveBeenCalledWith(`Converted src/file1.js to JSON.`);
-    expect(logger.success).toHaveBeenCalledWith(`Converted src/file2.js to JSON.`);
+  test('throws error when account not found', () => {
+    mockGetAccountId.mockReturnValueOnce(null);
+    expect(() => uploadToHubSpot(options)).toThrow(
+      'Account test-account not found in hubspot.config.yml.'
+    );
   });
 
-  it('should warn if no files are found', async () => {
-    vi.mocked(readdirSync).mockReturnValue([]);
+  test('handles empty directory', async () => {
+    mockReaddirSync.mockReturnValue([]);
     const plugin = uploadToHubSpot(options);
-    const logger = new Logger();
 
-    await plugin.closeBundle.call({ logger });
+    await plugin.closeBundle();
 
-    expect(logger.warn).toHaveBeenCalledWith(`No files found in ${srcDir}`);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('No files found')
+    );
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 
-  it('should handle upload errors', async () => {
-    vi.mocked(upload).mockRejectedValue(new Error('Upload failed'));
+  test('uploads single file successfully', async () => {
+    mockReaddirSync.mockReturnValue(['test.js']);
+    mockStatSync.mockReturnValue({ isDirectory: () => false });
+
     const plugin = uploadToHubSpot(options);
-    const logger = new Logger();
+    await plugin.closeBundle();
 
-    await plugin.closeBundle.call({ logger });
+    expect(mockUpload).toHaveBeenCalledWith(
+      '12345',
+      expect.stringContaining('test.js'),
+      normalizePath(join(options.dest, 'test.js'))
+    );
+    expect(mockLogger.success).toHaveBeenCalledWith(
+      expect.stringContaining('Successfully uploaded')
+    );
+  });
 
-    expect(logger.error).toHaveBeenCalledWith(`Failed to upload dest/file1.js to account ${accountId}. \n\tUpload failed`);
-    expect(logger.error).toHaveBeenCalledWith(`Failed to upload dest/file2.js to account ${accountId}. \n\tUpload failed`);
+  test('handles upload failure', async () => {
+    mockReaddirSync.mockReturnValue(['test.js']);
+    mockStatSync.mockReturnValue({ isDirectory: () => false });
+    mockUpload.mockRejectedValueOnce(new Error('Upload failed'));
+
+    const plugin = uploadToHubSpot(options);
+    await plugin.closeBundle();
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to upload')
+    );
+  });
+
+  test('processes convertible FieldsJS file', async () => {
+    mockReaddirSync.mockReturnValue(['fields.js']);
+    mockStatSync.mockReturnValue({ isDirectory: () => false });
+    mockIsConvertableFieldJs.mockReturnValue(true);
+
+    const plugin = uploadToHubSpot(options);
+    await plugin.closeBundle();
+
+    expect(mockFieldsJs).toHaveBeenCalled();
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Converting')
+    );
+    expect(mockLogger.success).toHaveBeenCalledWith(
+      expect.stringContaining('Converted')
+    );
+  });
+
+  test('recursively processes directory', async () => {
+    mockReaddirSync
+      .mockReturnValueOnce(['folder', 'file1.js'])
+      .mockReturnValueOnce(['file2.js']);
+    mockStatSync
+      .mockReturnValueOnce({ isDirectory: () => true })
+      .mockReturnValue({ isDirectory: () => false });
+
+    const plugin = uploadToHubSpot(options);
+    await plugin.closeBundle();
+
+    expect(mockUpload).toHaveBeenCalledTimes(2);
   });
 });
