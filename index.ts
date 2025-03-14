@@ -79,7 +79,10 @@ export default function uploadToHubSpot(options: Options) {
           await upload(accountId, filepath, uploadDest);
           logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
         } catch (error: any) {
-          logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
+          if (error.message?.includes('Unknown file type'))
+            logger.info(`Skipping ${uploadDest} as it is not a supported file type.`);
+          else
+            logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
         }
       });
 
