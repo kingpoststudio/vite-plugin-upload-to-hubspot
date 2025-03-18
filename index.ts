@@ -1,10 +1,11 @@
-import { normalizePath } from 'vite';
-import { join, resolve } from 'node:path';
-import { readdirSync, statSync } from 'node:fs';
-import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
-import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
-import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
-import { FieldsJs, isConvertableFieldJs } from '@hubspot/local-dev-lib/cms/handleFieldsJS';
+import {normalizePath} from 'vite';
+import {join, resolve} from 'node:path';
+import {readdirSync, statSync} from 'node:fs';
+import {upload} from '@hubspot/local-dev-lib/api/fileMapper';
+import {loadConfig, getAccountId} from '@hubspot/local-dev-lib/config';
+import {LOG_LEVEL, setLogLevel, setLogger, Logger} from '@hubspot/local-dev-lib/logger';
+import {FieldsJs, isConvertableFieldJs} from '@hubspot/local-dev-lib/cms/handleFieldsJS';
+import {rmSync} from "fs";
 
 loadConfig("hubspot.config.yml");
 
@@ -17,7 +18,7 @@ type Options = {
 };
 
 export default function uploadToHubSpot(options: Options) {
-  const { src, dest, account } = options;
+  const {src, dest, account} = options;
   const accountId = getAccountId(account);
 
   if (!accountId) {
@@ -54,7 +55,7 @@ export default function uploadToHubSpot(options: Options) {
       logger.log(`\nUploading files from ${srcDir} to account ${accountId}.`);
       logger.info(`Scanning ${srcDir} for files to upload.`);
 
-      const files = getAllFiles(srcDir);
+      let files = getAllFiles(srcDir);
 
       if (files.length === 0) {
         logger.warn(`No files found in ${srcDir}`);
@@ -71,6 +72,7 @@ export default function uploadToHubSpot(options: Options) {
 
       await Promise.all(convertFieldsPromises);
 
+      files = getAllFiles(srcDir);
       const uploadPromises = files.map(async (filepath: string) => {
         const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
         const uploadDest = normalizePath(join(dest, relativePath));
@@ -87,6 +89,26 @@ export default function uploadToHubSpot(options: Options) {
       });
 
       await Promise.all(uploadPromises);
+
+      const removeFieldsJsFiles = (dir: string) => {
+        try {
+          const files = readdirSync(dir);
+          files.forEach((file) => {
+            const filePath = join(dir, file);
+            const stat = statSync(filePath);
+
+            if (stat.isDirectory()) {
+              removeFieldsJsFiles(filePath);
+            } else if (file.endsWith("fields.js")) {
+              rmSync(filePath, {force: true});
+              console.log(`✅ Removed: ${filePath}`);
+            }
+          });
+        } catch (err) {
+          console.error(`❌ Failed to process directory: ${dir}`, err);
+        }
+      };
+      removeFieldsJsFiles(srcDir);
     },
   };
 }
