@@ -89,26 +89,6 @@ export default function uploadToHubSpot(options: Options) {
       });
 
       await Promise.all(uploadPromises);
-
-      const removeFieldsJsFiles = (dir: string) => {
-        try {
-          const files = readdirSync(dir);
-          files.forEach((file) => {
-            const filePath = join(dir, file);
-            const stat = statSync(filePath);
-
-            if (stat.isDirectory()) {
-              removeFieldsJsFiles(filePath);
-            } else if (file.endsWith("fields.js")) {
-              rmSync(filePath, {force: true});
-              console.log(`✅ Removed: ${filePath}`);
-            }
-          });
-        } catch (err) {
-          console.error(`❌ Failed to process directory: ${dir}`, err);
-        }
-      };
-      removeFieldsJsFiles(srcDir);
     },
   };
 }
