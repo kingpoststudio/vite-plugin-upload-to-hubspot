@@ -9,7 +9,7 @@ import { FieldsJs, isConvertableFieldJs } from '@hubspot/local-dev-lib/cms/handl
 loadConfig("hubspot.config.yml");
 const pluginName = 'UploadToHubSpot';
 export default function uploadToHubSpot(options) {
-    const { src, dest, account, assetSrc } = options;
+    const { src, dest, account, assets } = options;
     const accountId = getAccountId(account);
     if (!accountId) {
         throw new Error(`Account ${account} not found in hubspot.config.yml.`);
@@ -29,7 +29,7 @@ export default function uploadToHubSpot(options) {
         return files;
     };
     const shouldUseFileManager = (filepath) => {
-        return !!assetSrc && normalizePath(filepath).includes(normalizePath(assetSrc));
+        return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
     };
     return {
         name: pluginName,
@@ -53,10 +53,11 @@ export default function uploadToHubSpot(options) {
                     await fieldsJs.init();
                 }
             });
-            await Promise.all(convertFieldsPromises);
             const uploadPromises = files.map(async (filepath) => {
                 const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
-                const uploadDest = normalizePath(join(dest, relativePath));
+                const uploadDest = shouldUseFileManager(filepath)
+                    ? normalizePath(join(assets.dest, relativePath))
+                    : normalizePath(join(dest, relativePath));
                 try {
                     if (shouldUseFileManager(filepath)) {
                         await uploadFile(accountId, filepath, uploadDest);
@@ -74,7 +75,7 @@ export default function uploadToHubSpot(options) {
                         logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
                 }
             });
-            await Promise.all(uploadPromises);
-        },
+            await Promise.all([...convertFieldsPromises, ...uploadPromises]);
+        }
     };
 }

@@ -1,6 +1,6 @@
 import { normalizePath } from 'vite';
 import { join, resolve } from 'node:path';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
 import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
@@ -15,11 +15,14 @@ type Options = {
   src: string;
   dest: string;
   account?: string;
-  assetSrc?: string;
+  assets?: {
+    src: string;
+    dest: string;
+  }
 };
 
 export default function uploadToHubSpot(options: Options) {
-  const { src, dest, account, assetSrc } = options;
+  const { src, dest, account, assets } = options;
   const accountId = getAccountId(account);
 
   if (!accountId) {
@@ -44,7 +47,7 @@ export default function uploadToHubSpot(options: Options) {
   };
 
   const shouldUseFileManager = (filepath: string): boolean => {
-    return !!assetSrc && normalizePath(filepath).includes(normalizePath(assetSrc));
+    return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
   }
 
   return {
@@ -75,11 +78,11 @@ export default function uploadToHubSpot(options: Options) {
         }
       });
 
-      await Promise.all(convertFieldsPromises);
-
       const uploadPromises = files.map(async (filepath: string) => {
         const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
-        const uploadDest = normalizePath(join(dest, relativePath));
+        const uploadDest = shouldUseFileManager(filepath)
+          ? normalizePath(join(assets!.dest, relativePath))
+          : normalizePath(join(dest, relativePath));
 
         try {
           if (shouldUseFileManager(filepath)) {
@@ -97,7 +100,7 @@ export default function uploadToHubSpot(options: Options) {
         }
       });
 
-      await Promise.all(uploadPromises);
-    },
-  };
+      await Promise.all([...convertFieldsPromises, ...uploadPromises]);
+    }
+  }
 }
