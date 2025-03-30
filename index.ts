@@ -2,6 +2,7 @@ import { normalizePath } from 'vite';
 import { join, resolve } from 'node:path';
 import { readdirSync, statSync } from 'node:fs';
 import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
+import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
 import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
 import { FieldsJs, isConvertableFieldJs } from '@hubspot/local-dev-lib/cms/handleFieldsJS';
@@ -14,10 +15,11 @@ type Options = {
   src: string;
   dest: string;
   account?: string;
+  assetSrc?: string;
 };
 
 export default function uploadToHubSpot(options: Options) {
-  const { src, dest, account } = options;
+  const { src, dest, account, assetSrc } = options;
   const accountId = getAccountId(account);
 
   if (!accountId) {
@@ -40,6 +42,10 @@ export default function uploadToHubSpot(options: Options) {
 
     return files;
   };
+
+  const shouldUseFileManager = (filepath: string): boolean => {
+    return !!assetSrc && normalizePath(filepath).includes(normalizePath(assetSrc));
+  }
 
   return {
     name: pluginName,
@@ -76,10 +82,15 @@ export default function uploadToHubSpot(options: Options) {
         const uploadDest = normalizePath(join(dest, relativePath));
 
         try {
-          await upload(accountId, filepath, uploadDest);
-          logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
+          if (shouldUseFileManager(filepath)) {
+            await uploadFile(accountId, filepath, uploadDest);
+            logger.success(`Successfully uploaded ${uploadDest} to file manager for account ${accountId}.`);
+          } else {
+            await upload(accountId, filepath, uploadDest);
+            logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
+          }
         } catch (error: any) {
-          if (error.message?.includes('Unknown file type'))
+          if (error.message?.includes('Unknown file type') && !shouldUseFileManager(filepath))
             logger.info(`Skipping ${uploadDest} as it is not a supported file type.`);
           else
             logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
