@@ -1,6 +1,6 @@
 import { normalizePath } from 'vite';
 import { join, resolve } from 'node:path';
-import { readdirSync, statSync, readFileSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
 import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';

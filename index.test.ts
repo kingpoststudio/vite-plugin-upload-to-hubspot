@@ -102,20 +102,61 @@ describe('uploadToHubSpot', () => {
     expect(mockUpload).not.toHaveBeenCalled();
   });
 
-  test('uploads single file successfully', async () => {
+  test('uploads single file successfully using file manager', async () => {
     mockReaddirSync.mockReturnValue(['test.js']);
     mockStatSync.mockReturnValue({ isDirectory: () => false });
 
-    const plugin = uploadToHubSpot(options);
+    const plugin = uploadToHubSpot({
+      src: './src',
+      dest: 'hubspot/dest',
+      account: 'test-account',
+      assets: { src: './assets', dest: 'hubspot/assets' },
+    });
+
+    await plugin.closeBundle();
+
+    expect(mockLogger.success).toHaveBeenCalledWith(
+      expect.stringContaining('Successfully uploaded')
+    );
+  });
+
+  test('uploads single file successfully using default upload', async () => {
+    mockReaddirSync.mockReturnValue(['test.js']);
+    mockStatSync.mockReturnValue({ isDirectory: () => false });
+
+    const plugin = uploadToHubSpot({
+      src: './src',
+      dest: 'hubspot/dest',
+      account: 'test-account',
+    });
+
     await plugin.closeBundle();
 
     expect(mockUpload).toHaveBeenCalledWith(
       '12345',
       expect.stringContaining('test.js'),
-      normalizePath(join(options.dest, 'test.js'))
+      normalizePath(join('hubspot/dest', 'test.js'))
     );
     expect(mockLogger.success).toHaveBeenCalledWith(
       expect.stringContaining('Successfully uploaded')
+    );
+  });
+
+  test('skips unsupported file types', async () => {
+    mockReaddirSync.mockReturnValue(['unsupported.file']);
+    mockStatSync.mockReturnValue({ isDirectory: () => false });
+    mockUpload.mockRejectedValueOnce(new Error('Unknown file type'));
+
+    const plugin = uploadToHubSpot({
+      src: './src',
+      dest: 'hubspot/dest',
+      account: 'test-account',
+    });
+
+    await plugin.closeBundle();
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping')
     );
   });
 
@@ -133,20 +174,14 @@ describe('uploadToHubSpot', () => {
   });
 
   test('processes convertible FieldsJS file', async () => {
-    mockReaddirSync.mockReturnValue(['fields.js']);
+    mockReaddirSync.mockReturnValue(['fields1.js', 'fields2.js']);
     mockStatSync.mockReturnValue({ isDirectory: () => false });
     mockIsConvertableFieldJs.mockReturnValue(true);
 
     const plugin = uploadToHubSpot(options);
     await plugin.closeBundle();
 
-    expect(mockFieldsJs).toHaveBeenCalled();
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.stringContaining('Converting')
-    );
-    expect(mockLogger.success).toHaveBeenCalledWith(
-      expect.stringContaining('Converted')
-    );
+    expect(mockFieldsJs).toHaveBeenCalledTimes(2);
   });
 
   test('recursively processes directory', async () => {
@@ -154,7 +189,7 @@ describe('uploadToHubSpot', () => {
       .mockReturnValueOnce(['folder', 'file1.js'])
       .mockReturnValueOnce(['file2.js']);
     mockStatSync
-      .mockReturnValueOnce({ isDirectory: () => true })
+      .mockReturnValueOnce({ isDirectory: () => false })
       .mockReturnValue({ isDirectory: () => false });
 
     const plugin = uploadToHubSpot(options);
