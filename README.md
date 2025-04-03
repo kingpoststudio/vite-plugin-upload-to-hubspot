@@ -1,7 +1,6 @@
 # Vite Plugin: Upload to HubSpot
 
-This Vite plugin uploads files from a specified source directory to a HubSpot account after the build process is complete.
-It uses the HubSpot Local Development Library to handle the file uploads.
+This Vite plugin uploads files from a specified source directory to a HubSpot account after the build process is complete. It uses the HubSpot Local Development Library to handle the file uploads.
 
 ## Installation
 
@@ -28,22 +27,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, "src/js/main.ts"),
-        "modules/ContentCarousel.module/module": resolve(
-          __dirname,
-          "src/modules/ContentCarousel.module/module.ts"
-        ),
-        "modules/HeroCarousel.module/module": resolve(
-          __dirname,
-          "src/modules/HeroCarousel.module/module.ts"
-        ),
-        "modules/globals/Footer.module/module": resolve(
-          __dirname,
-          "src/modules/globals/Footer.module/module.ts"
-        ),
-        "modules/globals/Header.module/module": resolve(
-          __dirname,
-          "src/modules/globals/Header.module/module.ts"
-        ),
       },
       output: {
         format: "es",
@@ -62,8 +45,12 @@ export default defineConfig({
   plugins: [
     uploadToHubSpot({
       src: "dist",
-      dest: "Theme",
+      dest: "ThemeName",
       account: "develop",
+      assets: {
+        src: "assets",
+        dest: "ThemeName/assets",
+      },
     }),
   ],
   resolve: {
@@ -77,3 +64,15 @@ export default defineConfig({
 - `src`: The source directory containing the files to upload.
 - `dest`: The destination directory on the HubSpot account.
 - `account`: The HubSpot account to upload the files to. This should match an account in your `hubspot.config.yml` file.
+- `assets`: (Optional) An object specifying additional assets to upload. It contains:
+  - `src`: The source directory for the assets.
+  - `dest`: The destination directory for the assets on the HubSpot account.
+
+#### Features
+
+- **Recursive Directory Processing**: The plugin scans the `src` directory recursively to find all files to upload, typically a build directory.
+- **File Type Handling**: The plugin skips unsupported file types and logs a message for skipped files.
+- **FieldsJS Processing**: Automatically detects and processes convertible FieldsJS files before uploading.
+- **File Manager Support**: Allows uploading specific files to the HubSpot File Manager if the `assets` option is configured.
+- **Error Handling**: Logs detailed error messages for failed uploads, including reasons for failure.
+- **Success Logging**: Logs success messages for each file uploaded successfully.
