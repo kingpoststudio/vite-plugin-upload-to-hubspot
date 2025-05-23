@@ -5,7 +5,6 @@ import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
 import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
 import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
-import { FieldsJs, isConvertableFieldJs } from '@hubspot/local-dev-lib/cms/handleFieldsJS';
 
 loadConfig("hubspot.config.yml");
 
@@ -70,14 +69,6 @@ export default function uploadToHubSpot(options: Options) {
         return;
       }
 
-      const convertFieldsPromises = files.map(async (filepath: string) => {
-        if (isConvertableFieldJs(srcDir, filepath, true)) {
-          logger.info(`Found a fields JS file: ${filepath}.`);
-          const fieldsJs = new FieldsJs(srcDir, filepath, srcDir);
-          await fieldsJs.init();
-        }
-      });
-
       const uploadPromises = files.map(async (filepath: string) => {
         const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
         const uploadDest = shouldUseFileManager(filepath)
@@ -100,7 +91,7 @@ export default function uploadToHubSpot(options: Options) {
         }
       });
 
-      await Promise.all([...convertFieldsPromises, ...uploadPromises]);
+      await Promise.all(uploadPromises);
     }
   }
 }
