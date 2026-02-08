@@ -1,10 +1,20 @@
 {
   "name": "vite-plugin-upload-to-hubspot",
-  "version": "0.0.5",
-  "description": "A Vite plugin to upload files to HubSpot",
+  "version": "0.1.0",
+  "description": "Upload files to HubSpot — as a Vite plugin or standalone",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./upload": {
+      "types": "./dist/upload.d.ts",
+      "import": "./dist/upload.js"
+    }
+  },
   "files": [
     "dist/*"
   ],

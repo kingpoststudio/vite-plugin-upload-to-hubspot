@@ -10,6 +10,6 @@
     "moduleResolution": "nodenext"
   },
   "types": ["bun"],
-  "include": ["index.ts"],
+  "include": ["index.ts", "upload.ts"],
   "exclude": ["node_modules", "dist"]
 }

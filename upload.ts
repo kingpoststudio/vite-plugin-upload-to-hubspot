@@ -1,0 +1,121 @@
+import { join, resolve } from 'node:path';
+import { readdirSync, statSync } from 'node:fs';
+import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
+import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
+import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
+import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
+
+export type UploadOptions = {
+  /** Source directory to upload from. */
+  src: string;
+  /** Destination path on HubSpot. */
+  dest: string;
+  /** Account name or ID from hubspot.config.yml. */
+  account?: string;
+  /** File manager upload config for assets. */
+  assets?: {
+    src: string;
+    dest: string;
+  };
+  /** Glob patterns or extensions to exclude (e.g. ['.ts']). Matched against relative file paths. */
+  exclude?: string[];
+  /** Path to hubspot.config.yml. Defaults to "hubspot.config.yml". */
+  configPath?: string;
+};
+
+const normalizePath = (p: string) => p.replace(/\\/g, '/');
+
+const getAllFiles = (dirPath: string): string[] => {
+  let files: string[] = [];
+  const items = readdirSync(dirPath);
+
+  for (const item of items) {
+    const fullPath = join(dirPath, item);
+    const stat = statSync(fullPath);
+
+    if (stat.isDirectory()) files = files.concat(getAllFiles(fullPath));
+    else files.push(fullPath);
+  }
+
+  return files;
+};
+
+const shouldExclude = (relativePath: string, exclude: string[]): boolean => {
+  return exclude.some((pattern) => {
+    // Extension match (e.g., '.ts')
+    if (pattern.startsWith('.')) return relativePath.endsWith(pattern);
+    // Substring match
+    return relativePath.includes(pattern);
+  });
+};
+
+/**
+ * Standalone upload function — uploads files from a local directory to HubSpot.
+ * Can be used without Vite.
+ */
+export async function uploadFiles(options: UploadOptions): Promise<void> {
+  const {
+    src,
+    dest,
+    account,
+    assets,
+    exclude = [],
+    configPath = 'hubspot.config.yml',
+  } = options;
+
+  loadConfig(configPath);
+
+  const accountId = getAccountId(account);
+  if (!accountId) {
+    throw new Error(`Account ${account} not found in ${configPath}.`);
+  }
+
+  const logger = new Logger();
+  setLogger(logger);
+  setLogLevel(LOG_LEVEL.LOG);
+
+  const srcDir = resolve(src);
+  logger.log(`\nUploading files from ${srcDir} to account ${accountId}.`);
+  logger.info(`Scanning ${srcDir} for files to upload.`);
+
+  const files = getAllFiles(srcDir);
+
+  if (files.length === 0) {
+    logger.warn(`No files found in ${srcDir}`);
+    return;
+  }
+
+  const shouldUseFileManager = (filepath: string): boolean => {
+    return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
+  };
+
+  const uploadPromises = files.map(async (filepath: string) => {
+    const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
+
+    // Skip excluded files
+    if (exclude.length > 0 && shouldExclude(relativePath, exclude)) {
+      return;
+    }
+
+    const uploadDest = shouldUseFileManager(filepath)
+      ? normalizePath(join(assets!.dest, relativePath))
+      : normalizePath(join(dest, relativePath));
+
+    try {
+      if (shouldUseFileManager(filepath)) {
+        await uploadFile(accountId, filepath, uploadDest);
+        logger.success(`Successfully uploaded ${uploadDest} to file manager for account ${accountId}.`);
+      } else {
+        await upload(accountId, filepath, uploadDest);
+        logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
+      }
+    } catch (error: any) {
+      if (error.message?.includes('Unknown file type') && !shouldUseFileManager(filepath))
+        logger.info(`Skipping ${uploadDest} as it is not a supported file type.`);
+      else
+        logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
+    }
+  });
+
+  await Promise.all(uploadPromises);
+}

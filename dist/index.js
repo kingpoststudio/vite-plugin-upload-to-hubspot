@@ -8,7 +8,7 @@ import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-li
 loadConfig("hubspot.config.yml");
 const pluginName = 'UploadToHubSpot';
 export default function uploadToHubSpot(options) {
-    const { src, dest, account, assets } = options;
+    const { src, dest, account, assets, exclude = [] } = options;
     const accountId = getAccountId(account);
     if (!accountId) {
         throw new Error(`Account ${account} not found in hubspot.config.yml.`);
@@ -30,6 +30,13 @@ export default function uploadToHubSpot(options) {
     const shouldUseFileManager = (filepath) => {
         return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
     };
+    const shouldExclude = (relativePath) => {
+        return exclude.some((pattern) => {
+            if (pattern.startsWith('.'))
+                return relativePath.endsWith(pattern);
+            return relativePath.includes(pattern);
+        });
+    };
     return {
         name: pluginName,
         configResolved() {
@@ -47,6 +54,9 @@ export default function uploadToHubSpot(options) {
             }
             const uploadPromises = files.map(async (filepath) => {
                 const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
+                if (exclude.length > 0 && shouldExclude(relativePath)) {
+                    return;
+                }
                 const uploadDest = shouldUseFileManager(filepath)
                     ? normalizePath(join(assets.dest, relativePath))
                     : normalizePath(join(dest, relativePath));

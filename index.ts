@@ -14,6 +14,7 @@ type Options = {
   src: string;
   dest: string;
   account?: string;
+  exclude?: string[];
   assets?: {
     src: string;
     dest: string;
@@ -21,7 +22,7 @@ type Options = {
 };
 
 export default function uploadToHubSpot(options: Options) {
-  const { src, dest, account, assets } = options;
+  const { src, dest, account, assets, exclude = [] } = options;
   const accountId = getAccountId(account);
 
   if (!accountId) {
@@ -49,6 +50,13 @@ export default function uploadToHubSpot(options: Options) {
     return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
   }
 
+  const shouldExclude = (relativePath: string): boolean => {
+    return exclude.some((pattern) => {
+      if (pattern.startsWith('.')) return relativePath.endsWith(pattern);
+      return relativePath.includes(pattern);
+    });
+  };
+
   return {
     name: pluginName,
 
@@ -71,6 +79,11 @@ export default function uploadToHubSpot(options: Options) {
 
       const uploadPromises = files.map(async (filepath: string) => {
         const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
+
+        if (exclude.length > 0 && shouldExclude(relativePath)) {
+          return;
+        }
+
         const uploadDest = shouldUseFileManager(filepath)
           ? normalizePath(join(assets!.dest, relativePath))
           : normalizePath(join(dest, relativePath));

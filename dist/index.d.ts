@@ -2,6 +2,7 @@ type Options = {
     src: string;
     dest: string;
     account?: string;
+    exclude?: string[];
     assets?: {
         src: string;
         dest: string;
