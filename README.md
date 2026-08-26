@@ -115,4 +115,4 @@ git tag v0.1.2
 git push origin v0.1.2
 ```
 
-Creating a GitHub Release with tag `v0.1.2` does the same thing. The tag must be `v` plus the exact `package.json` version, or the workflow fails before publishing.
+You can also publish without a tag: **Actions → Publish to npm → Run workflow**.
