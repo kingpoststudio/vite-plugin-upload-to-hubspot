@@ -89,7 +89,7 @@ The same options are available on the standalone `uploadFiles()` helper from `vi
 
 ## Releasing
 
-Pushing a tag that matches `package.json` publishes to npm via [trusted publishing](https://docs.npmjs.com/trusted-publishers/). No `NPM_TOKEN` secret is required.
+A push to `master` publishes to npm when `package.json` has a version that is not already on the registry. No tag and no `NPM_TOKEN` are required.
 
 **One-time setup** from a logged-in npm CLI (skips the flaky package-settings page):
 
@@ -105,14 +105,4 @@ If you prefer the website, open [the package access page](https://www.npmjs.com/
 - Workflow filename: `publish.yml`
 - Allowed actions: `npm publish`
 
-**Each release:**
-
-1. Bump `version` in `package.json` and merge to `master`.
-2. Tag that commit and push:
-
-```bash
-git tag v0.1.2
-git push origin v0.1.2
-```
-
-You can also publish without a tag: **Actions → Publish to npm → Run workflow**.
+**Each release:** bump `version` in `package.json` and push to `master`. If that version is already on npm, the workflow succeeds without publishing.
