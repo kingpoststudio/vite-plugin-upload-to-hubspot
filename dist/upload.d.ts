@@ -14,6 +14,12 @@ export type UploadOptions = {
     exclude?: string[];
     /** Path to hubspot.config.yml. Defaults to "hubspot.config.yml". */
     configPath?: string;
+    /** Max parallel CMS uploads. Default 5. */
+    concurrency?: number;
+    /** Attempts per file, including the first try. Default 4. */
+    attempts?: number;
+    /** Per-request timeout in ms. Default 60000. */
+    timeout?: number;
 };
 /**
  * Standalone upload function — uploads files from a local directory to HubSpot.

@@ -1,12 +1,17 @@
-import { normalizePath } from 'vite';
-import { join, resolve } from 'node:path';
-import { readdirSync, statSync } from 'node:fs';
-import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
-import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
+import type { Plugin } from 'vite';
+import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
 import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
+import {
+  DEFAULT_ATTEMPTS,
+  DEFAULT_CONCURRENCY,
+  DEFAULT_TIMEOUT_MS,
+  getAllFiles,
+  uploadQueuedFiles,
+} from './queue.js';
 
-loadConfig("hubspot.config.yml");
+loadConfig('hubspot.config.yml');
 
 const pluginName = 'UploadToHubSpot';
 
@@ -18,11 +23,23 @@ type Options = {
   assets?: {
     src: string;
     dest: string;
-  }
+  };
+  concurrency?: number;
+  attempts?: number;
+  timeout?: number;
 };
 
-export default function uploadToHubSpot(options: Options) {
-  const { src, dest, account, assets, exclude = [] } = options;
+export default function uploadToHubSpot(options: Options): Plugin {
+  const {
+    src,
+    dest,
+    account,
+    assets,
+    exclude = [],
+    concurrency = DEFAULT_CONCURRENCY,
+    attempts = DEFAULT_ATTEMPTS,
+    timeout = DEFAULT_TIMEOUT_MS,
+  } = options;
   const accountId = getAccountId(account);
 
   if (!accountId) {
@@ -31,29 +48,39 @@ export default function uploadToHubSpot(options: Options) {
 
   const logger = new Logger();
 
-  const getAllFiles = (dirPath: string): string[] => {
-    let files: string[] = [];
-    const items = readdirSync(dirPath);
+  const doUpload = async (): Promise<void> => {
+    const srcDir = resolve(src);
 
-    for (const item of items) {
-      const fullPath = join(dirPath, item);
-      const stat = statSync(fullPath);
-
-      if (stat.isDirectory()) files = files.concat(getAllFiles(fullPath));
-      else files.push(fullPath);
+    // Avoid masking earlier build failures: closeBundle still runs after errors,
+    // often once emptyOutDir has already removed the output directory.
+    if (!existsSync(srcDir)) {
+      logger.warn(
+        `Output directory ${srcDir} does not exist; skipping upload.`,
+      );
+      return;
     }
 
-    return files;
-  };
+    logger.log(`\nUploading files from ${srcDir} to account ${accountId}.`);
+    logger.info(`Scanning ${srcDir} for files to upload.`);
 
-  const shouldUseFileManager = (filepath: string): boolean => {
-    return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
-  }
+    const files = getAllFiles(srcDir);
 
-  const shouldExclude = (relativePath: string): boolean => {
-    return exclude.some((pattern) => {
-      if (pattern.startsWith('.')) return relativePath.endsWith(pattern);
-      return relativePath.includes(pattern);
+    if (files.length === 0) {
+      logger.warn(`No files found in ${srcDir}`);
+      return;
+    }
+
+    await uploadQueuedFiles({
+      files,
+      srcDir,
+      dest,
+      accountId,
+      logger,
+      assets,
+      exclude,
+      concurrency,
+      attempts,
+      timeout,
     });
   };
 
@@ -65,46 +92,14 @@ export default function uploadToHubSpot(options: Options) {
       setLogLevel(LOG_LEVEL.LOG);
     },
 
-    async closeBundle(): Promise<void> {
-      const srcDir = resolve(src);
-      logger.log(`\nUploading files from ${srcDir} to account ${accountId}.`);
-      logger.info(`Scanning ${srcDir} for files to upload.`);
-
-      const files = getAllFiles(srcDir);
-
-      if (files.length === 0) {
-        logger.warn(`No files found in ${srcDir}`);
-        return;
-      }
-
-      const uploadPromises = files.map(async (filepath: string) => {
-        const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
-
-        if (exclude.length > 0 && shouldExclude(relativePath)) {
-          return;
-        }
-
-        const uploadDest = shouldUseFileManager(filepath)
-          ? normalizePath(join(assets!.dest, relativePath))
-          : normalizePath(join(dest, relativePath));
-
-        try {
-          if (shouldUseFileManager(filepath)) {
-            await uploadFile(accountId, filepath, uploadDest);
-            logger.success(`Successfully uploaded ${uploadDest} to file manager for account ${accountId}.`);
-          } else {
-            await upload(accountId, filepath, uploadDest);
-            logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
-          }
-        } catch (error: any) {
-          if (error.message?.includes('Unknown file type') && !shouldUseFileManager(filepath))
-            logger.info(`Skipping ${uploadDest} as it is not a supported file type.`);
-          else
-            logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
-        }
-      });
-
-      await Promise.all(uploadPromises);
-    }
-  }
+    // Prefer writeBundle (post/sequential) so we run after files — including
+    // vite-plugin-static-copy — are on disk, and only after a successful write.
+    writeBundle: {
+      order: 'post',
+      sequential: true,
+      async handler() {
+        await doUpload();
+      },
+    },
+  };
 }

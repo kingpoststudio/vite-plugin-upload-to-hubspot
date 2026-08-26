@@ -1,9 +1,13 @@
-import { join, resolve } from 'node:path';
-import { readdirSync, statSync } from 'node:fs';
-import { upload } from '@hubspot/local-dev-lib/api/fileMapper';
-import { uploadFile } from '@hubspot/local-dev-lib/api/fileManager';
+import { resolve } from 'node:path';
 import { loadConfig, getAccountId } from '@hubspot/local-dev-lib/config';
 import { LOG_LEVEL, setLogLevel, setLogger, Logger } from '@hubspot/local-dev-lib/logger';
+import {
+  DEFAULT_ATTEMPTS,
+  DEFAULT_CONCURRENCY,
+  DEFAULT_TIMEOUT_MS,
+  getAllFiles,
+  uploadQueuedFiles,
+} from './queue.js';
 
 export type UploadOptions = {
   /** Source directory to upload from. */
@@ -21,32 +25,12 @@ export type UploadOptions = {
   exclude?: string[];
   /** Path to hubspot.config.yml. Defaults to "hubspot.config.yml". */
   configPath?: string;
-};
-
-const normalizePath = (p: string) => p.replace(/\\/g, '/');
-
-const getAllFiles = (dirPath: string): string[] => {
-  let files: string[] = [];
-  const items = readdirSync(dirPath);
-
-  for (const item of items) {
-    const fullPath = join(dirPath, item);
-    const stat = statSync(fullPath);
-
-    if (stat.isDirectory()) files = files.concat(getAllFiles(fullPath));
-    else files.push(fullPath);
-  }
-
-  return files;
-};
-
-const shouldExclude = (relativePath: string, exclude: string[]): boolean => {
-  return exclude.some((pattern) => {
-    // Extension match (e.g., '.ts')
-    if (pattern.startsWith('.')) return relativePath.endsWith(pattern);
-    // Substring match
-    return relativePath.includes(pattern);
-  });
+  /** Max parallel CMS uploads. Default 5. */
+  concurrency?: number;
+  /** Attempts per file, including the first try. Default 4. */
+  attempts?: number;
+  /** Per-request timeout in ms. Default 60000. */
+  timeout?: number;
 };
 
 /**
@@ -61,6 +45,9 @@ export async function uploadFiles(options: UploadOptions): Promise<void> {
     assets,
     exclude = [],
     configPath = 'hubspot.config.yml',
+    concurrency = DEFAULT_CONCURRENCY,
+    attempts = DEFAULT_ATTEMPTS,
+    timeout = DEFAULT_TIMEOUT_MS,
   } = options;
 
   loadConfig(configPath);
@@ -85,37 +72,16 @@ export async function uploadFiles(options: UploadOptions): Promise<void> {
     return;
   }
 
-  const shouldUseFileManager = (filepath: string): boolean => {
-    return !!assets?.src && normalizePath(filepath).includes(normalizePath(assets.src));
-  };
-
-  const uploadPromises = files.map(async (filepath: string) => {
-    const relativePath = normalizePath(filepath.replace(srcDir, '').replace(/^\//, ''));
-
-    // Skip excluded files
-    if (exclude.length > 0 && shouldExclude(relativePath, exclude)) {
-      return;
-    }
-
-    const uploadDest = shouldUseFileManager(filepath)
-      ? normalizePath(join(assets!.dest, relativePath))
-      : normalizePath(join(dest, relativePath));
-
-    try {
-      if (shouldUseFileManager(filepath)) {
-        await uploadFile(accountId, filepath, uploadDest);
-        logger.success(`Successfully uploaded ${uploadDest} to file manager for account ${accountId}.`);
-      } else {
-        await upload(accountId, filepath, uploadDest);
-        logger.success(`Successfully uploaded ${uploadDest} to account ${accountId}.`);
-      }
-    } catch (error: any) {
-      if (error.message?.includes('Unknown file type') && !shouldUseFileManager(filepath))
-        logger.info(`Skipping ${uploadDest} as it is not a supported file type.`);
-      else
-        logger.error(`Failed to upload ${uploadDest} to account ${accountId}. Reason: ${error.message}`);
-    }
+  await uploadQueuedFiles({
+    files,
+    srcDir,
+    dest,
+    accountId,
+    logger,
+    assets,
+    exclude,
+    concurrency,
+    attempts,
+    timeout,
   });
-
-  await Promise.all(uploadPromises);
 }
